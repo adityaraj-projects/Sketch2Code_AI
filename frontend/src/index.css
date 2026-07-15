@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-ink-700;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background-color: #0a0b10;
+  }
+  ::selection {
+    background-color: rgba(124, 92, 255, 0.35);
+  }
+  :focus-visible {
+    outline: 2px solid #7c5cff;
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0a0b10;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #262a3a;
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #363b52;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-ink-900/70 backdrop-blur-md border border-white/[0.06] shadow-glass;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-2.5
+      font-medium text-white transition-all duration-200 hover:bg-violet-600
+      hover:shadow-glow-violet active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03]
+      px-5 py-2.5 font-medium text-paper-100 transition-all duration-200 hover:bg-white/[0.07]
+      active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-white/10 bg-ink-900 px-4 py-2.5 text-sm text-paper-100
+      placeholder:text-paper-500 outline-none transition-colors focus:border-violet-500;
+  }
+
+  .label-eyebrow {
+    @apply text-xs font-mono uppercase tracking-[0.2em] text-violet-400;
+  }
+}
+
+/* Reduced motion respect, per accessibility floor */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Same rule, applied manually when the person enables "Reduce motion" in
+   Settings, independent of their OS-level preference. */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
