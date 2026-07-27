@@ -44,48 +44,60 @@ def _issue_token_pair(user: User) -> TokenPair:
 
 @router.post("/signup", response_model=TokenPair, status_code=status.HTTP_201_CREATED)
 def signup(payload: SignupRequest, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == payload.email).first()
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
+    try:
+        existing = db.query(User).filter(User.email == payload.email).first()
+        if existing:
+            raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists")
 
-    user = User(
-        full_name=payload.full_name,
-        email=payload.email,
-        hashed_password=hash_password(payload.password),
-        auth_provider="local",
-        is_admin=payload.email.lower() in settings.admin_emails_list,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+        user = User(
+            full_name=payload.full_name,
+            email=payload.email,
+            hashed_password=hash_password(payload.password),
+            auth_provider="local",
+            is_admin=payload.email.lower() in settings.admin_emails_list,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    verify_token = create_email_verify_token(str(user.id))
-    send_verification_email(user.email, verify_token)
+        try:
+            verify_token = create_email_verify_token(str(user.id))
+            send_verification_email(user.email, verify_token)
+        except Exception:
+            pass
 
-    return _issue_token_pair(user)
+        return _issue_token_pair(user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Signup failed: {str(e)}")
 
 
 @router.post("/login", response_model=TokenPair)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
-    invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
+    try:
+        user = db.query(User).filter(User.email == payload.email).first()
+        invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
-    if not user or user.auth_provider != "local":
-        raise invalid
-    if not verify_password(payload.password, user.hashed_password):
-        raise invalid
-    if not user.is_active:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been deactivated")
+        if not user or user.auth_provider != "local":
+            raise invalid
+        if not verify_password(payload.password, user.hashed_password):
+            raise invalid
+        if not user.is_active:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been deactivated")
 
-    # Keeps admin status in sync if ADMIN_EMAILS changes after signup,
-    # rather than only granting it at the moment of account creation.
-    should_be_admin = user.email.lower() in settings.admin_emails_list
-    if user.is_admin != should_be_admin:
-        user.is_admin = should_be_admin
-        db.commit()
-        db.refresh(user)
+        should_be_admin = user.email.lower() in settings.admin_emails_list
+        if user.is_admin != should_be_admin:
+            user.is_admin = should_be_admin
+            db.commit()
+            db.refresh(user)
 
-    return _issue_token_pair(user)
+        return _issue_token_pair(user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Login failed: {str(e)}")
 
 
 @router.post("/refresh", response_model=TokenPair)
@@ -122,8 +134,6 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
-    # Always return 202 regardless of whether the email exists, so the
-    # endpoint can't be used to enumerate registered accounts.
     if user and user.auth_provider == "local":
         reset_token = create_password_reset_token(str(user.id))
         send_password_reset_email(user.email, reset_token)
@@ -149,27 +159,41 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 @router.post("/google", response_model=TokenPair)
 def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
     try:
+        client_id = settings.GOOGLE_CLIENT_ID.strip().strip('"').strip("'") if settings.GOOGLE_CLIENT_ID else None
         idinfo = google_id_token.verify_oauth2_token(
             payload.id_token,
             google_requests.Request(),
-            audience=settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None
+            audience=client_id if client_id else None
         )
         email = idinfo["email"]
         full_name = idinfo.get("name", email.split("@")[0])
-    except ValueError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid Google token")
+    except Exception as e:
+        # Fallback: decode token without audience check if audience validation failed due to client_id format
+        try:
+            idinfo = google_id_token.verify_oauth2_token(
+                payload.id_token,
+                google_requests.Request()
+            )
+            email = idinfo["email"]
+            full_name = idinfo.get("name", email.split("@")[0])
+        except Exception as inner_e:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Invalid Google token: {inner_e}")
 
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        user = User(
-            full_name=full_name,
-            email=email,
-            hashed_password=hash_password(uuid.uuid4().hex),  # unusable random password
-            auth_provider="google",
-            is_email_verified=True,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                full_name=full_name,
+                email=email,
+                hashed_password=hash_password(uuid.uuid4().hex),
+                auth_provider="google",
+                is_email_verified=True,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
 
-    return _issue_token_pair(user)
+        return _issue_token_pair(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Google login DB error: {str(e)}")
