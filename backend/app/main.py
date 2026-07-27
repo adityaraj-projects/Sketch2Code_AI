@@ -23,9 +23,10 @@ from app.api.routes import (
 from app.core.config import settings
 from app.db.database import Base, engine
 
-# Phase 1: create tables directly. Swap for Alembic migrations once the
-# schema needs versioned changes across environments (Phase 2+).
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Warning: Database initialization skipped or failed: {e}")
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -35,7 +36,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
