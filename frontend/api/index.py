@@ -1,9 +1,9 @@
 import sys
 import os
 
-# Add backend directory to sys.path so app modules import cleanly
-backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "backend"))
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
+# Add current directory to sys.path so 'app' package is found locally
+current_dir = os.path.dirname(__file__)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 from app.main import app
