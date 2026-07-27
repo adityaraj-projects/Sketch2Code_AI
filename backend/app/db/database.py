@@ -5,6 +5,9 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from app.core.config import settings
 
 db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
 if "VERCEL" in os.environ and db_url.startswith("sqlite"):
     db_url = "sqlite:////tmp/sketch2code.db"
 
